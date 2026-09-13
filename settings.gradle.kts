@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "foreground-service-example"
 include(":app")
+include(":payload")

